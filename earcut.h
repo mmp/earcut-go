@@ -16,7 +16,10 @@ typedef struct Triangles {
 extern "C" {
 #endif // __cplusplus
 
-extern Triangles Triangulate(Vertex *v, int nv);
+extern void *NewPolygon();
+extern void DeletePolygon(void *poly);
+extern void AddRing(void *poly, Vertex *v, int s, int e);
+extern Triangles Triangulate(void *poly, Vertex *v);
 
 #ifdef __cplusplus
 }
