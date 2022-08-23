@@ -17,13 +17,10 @@ type Vertex struct {
 	P [2]float64
 }
 
-// Polygon represents a general polygon; the given vertices specify its
-// extent. Currently, only solid polygons without holes can be specified,
-// though earcut.hpp is able to handle holes; that functionality could be
-// easily added to this wrapper if needed.
+// Polygon represents a general multipolygon; given by rings of vertices
+// (of any winding, courtesy of mapbox)
 type Polygon struct {
-	Vertices []Vertex
-	// TODO: support holes, since earcut.hpp does...
+	Rings [][]Vertex
 }
 
 // The result of the triangulation is returned as a slice of Triangles.
@@ -34,10 +31,28 @@ type Triangle struct {
 // Triangulate takes a Polygon and returns a slice of Triangles, representing
 // the polygon's triangulation.
 func Triangulate(p Polygon) []Triangle {
-	// Vertex above is layout-compatible with the Vertex type in earcut.h,
-	// so we can pass the pointer directly to C.Triangulate...
-	v := (*C.struct_Vertex)(unsafe.Pointer(&p.Vertices[0]))
-	ctris := C.Triangulate(v, C.int(len(p.Vertices)))
+	k := 0
+	vs := []Vertex{}
+	ss := []int{}
+	es := []int{}
+	poly := C.NewPolygon()
+
+	for _, ring := range p.Rings {
+		s := k
+		e := k + len(ring)
+		k = e
+		vs = append(vs, ring...)
+		ss = append(ss, s)
+		es = append(es, e)
+
+		// Vertex above is layout-compatible with the Vertex type in earcut.h,
+		// so we can pass the pointer directly to C.Triangulate...
+		uvs := (*C.struct_Vertex)(unsafe.Pointer(&vs[0]))
+		C.AddRing(poly, uvs, C.int(s), C.int(e))
+	}
+
+	uvs := (*C.struct_Vertex)(unsafe.Pointer(&vs[0]))
+	ctris := C.Triangulate(poly, uvs)
 
 	// And since Triangle is layout-compatible as well, we can #yolo our
 	// way stright to a slice.
@@ -47,6 +62,7 @@ func Triangulate(p Polygon) []Triangle {
 
 	// Free the storage allocated in the C++ code.
 	C.free(unsafe.Pointer(ctris.tri))
+	C.DeletePolygon(poly)
 
 	return tris
 }
